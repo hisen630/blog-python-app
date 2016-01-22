@@ -53,10 +53,8 @@ except ImportError:
 #################################################################
 ctx = threading.local()
 
-
 _RE_RESPONSE_STATUS = re.compile(r'^\d\d\d(\ [\w\ ]+)?$')
 _HEADER_X_POWERED_BY = ('X-Powered-By', 'transwarp/1.0')
-
 
 #  用于时区转换
 _TIMEDELTA_ZERO = datetime.timedelta(0)
@@ -252,6 +250,7 @@ class _HttpError(Exception):
     >>> e.status
     '404 Not Found'
     """
+
     def __init__(self, code):
         """
         Init an HttpError with response code.
@@ -293,6 +292,7 @@ class _RedirectError(_HttpError):
     >>> e.location
     'http://www.apple.com/'
     """
+
     def __init__(self, code, location):
         """
         Init an HttpError with response code.
@@ -310,6 +310,7 @@ class HttpError(object):
     """
     HTTP Exceptions
     """
+
     @staticmethod
     def badrequest():
         """
@@ -443,12 +444,14 @@ class Request(object):
         比如： Request({'REQUEST_METHOD':'POST', 'wsgi.input':StringIO('a=1&b=M%20M&c=ABC&c=XYZ&e=')})
             这里解析的就是 wsgi.input 对象里面的字节流
         """
+
         def _convert(item):
             if isinstance(item, list):
                 return [utils.to_unicode(i.value) for i in item]
             if item.filename:
                 return MultipartFile(item)
             return utils.to_unicode(item.value)
+
         fs = cgi.FieldStorage(fp=self._environ['wsgi.input'], environ=self._environ, keep_blank_values=True)
         inputs = dict()
         for key in fs:
@@ -717,7 +720,7 @@ class Request(object):
                 for c in cookie_str.split(';'):
                     pos = c.find('=')
                     if pos > 0:
-                        cookies[c[:pos].strip()] = utils.unquote(c[pos+1:])
+                        cookies[c[:pos].strip()] = utils.unquote(c[pos + 1:])
             self._cookies = cookies
         return self._cookies
 
@@ -751,7 +754,6 @@ class Request(object):
 
 
 class Response(object):
-
     def __init__(self):
         self._status = '200 OK'
         self._headers = {'CONTENT-TYPE': 'text/html; charset=utf-8'}
@@ -915,7 +917,8 @@ class Response(object):
         L = ['%s=%s' % (utils.quote(name), utils.quote(value))]
         if expires is not None:
             if isinstance(expires, (float, int, long)):
-                L.append('Expires=%s' % datetime.datetime.fromtimestamp(expires, UTC_0).strftime('%a, %d-%b-%Y %H:%M:%S GMT'))
+                L.append('Expires=%s' % datetime.datetime.fromtimestamp(expires, UTC_0).strftime(
+                    '%a, %d-%b-%Y %H:%M:%S GMT'))
             if isinstance(expires, (datetime.date, datetime.datetime)):
                 L.append('Expires=%s' % expires.astimezone(UTC_0).strftime('%a, %d-%b-%Y %H:%M:%S GMT'))
         elif isinstance(max_age, (int, long)):
@@ -1049,10 +1052,12 @@ def get(path):
     >>> test()
     'ok'
     """
+
     def _decorator(func):
         func.__web_route__ = path
         func.__web_method__ = 'GET'
         return func
+
     return _decorator
 
 
@@ -1070,10 +1075,12 @@ def post(path):
     >>> testpost()
     '200'
     """
+
     def _decorator(func):
         func.__web_route__ = path
         func.__web_method__ = 'POST'
         return func
+
     return _decorator
 
 
@@ -1177,6 +1184,7 @@ class StaticFileRoute(object):
     """
     静态文件路由对象，和Route相对应
     """
+
     def __init__(self):
         self.method = 'GET'
         self.is_static = False
@@ -1184,7 +1192,7 @@ class StaticFileRoute(object):
 
     def match(self, url):
         if url.startswith('/static/'):
-            return (url[1:], )
+            return (url[1:],)
         return None
 
     def __call__(self, *args):
@@ -1203,6 +1211,7 @@ class MultipartFile(object):
     f.filename # 'test.png'
     f.file # file-like object
     """
+
     def __init__(self, storage):
         self.filename = utils.to_unicode(storage.filename)
         self.file = storage.file
@@ -1213,7 +1222,6 @@ class MultipartFile(object):
 # 主要涉及到模板引擎和View装饰器的实现
 #################################################################
 class Template(object):
-
     def __init__(self, template_name, **kw):
         """
         Init a template object with template name, model as dict, and additional kw that will append to model.
@@ -1235,6 +1243,7 @@ class TemplateEngine(object):
     """
     Base template engine.
     """""
+
     def __call__(self, path, model):
         return '<!-- override this method to render template -->'
 
@@ -1313,6 +1322,7 @@ def view(path):
       ...
     ValueError: Expect return a dict when using @view() decorator.
     """
+
     def _decorator(func):
         @functools.wraps(func)
         def _wrapper(*args, **kw):
@@ -1321,7 +1331,9 @@ def view(path):
                 logging.info('return Template')
                 return Template(path, **r)
             raise ValueError('Expect return a dict when using @view() decorator.')
+
         return _wrapper
+
     return _decorator
 
 
@@ -1355,9 +1367,11 @@ def interceptor(pattern='/'):
     def check_admin(req, resp):
         pass
     """
+
     def _decorator(func):
         func.__interceptor__ = _build_pattern_fn(pattern)
         return func
+
     return _decorator
 
 
@@ -1371,6 +1385,7 @@ def _build_interceptor_fn(func, next):
             return func(next)
         else:
             return next()
+
     return _wrapper
 
 
@@ -1441,7 +1456,7 @@ def _load_module(module_name):
     if last_dot == (-1):
         return __import__(module_name, globals(), locals())
     from_module = module_name[:last_dot]
-    import_module = module_name[last_dot+1:]
+    import_module = module_name[last_dot + 1:]
     m = __import__(from_module, globals(), locals(), [import_module])
     return getattr(m, import_module)
 
@@ -1452,7 +1467,6 @@ def _load_module(module_name):
 # 上面的所有的功能都是对 wsgi 处理函数的装饰
 #################################################################
 class WSGIApplication(object):
-
     def __init__(self, document_root=None, **kw):
         """
         Init a WSGIApplication.
@@ -1546,7 +1560,7 @@ class WSGIApplication(object):
         def fn_route():
             request_method = ctx.request.request_method
             path_info = ctx.request.path_info
-            if request_method=='GET':
+            if request_method == 'GET':
                 fn = self._get_static.get(path_info, None)
                 if fn:
                     return fn()
@@ -1555,7 +1569,7 @@ class WSGIApplication(object):
                     if args:
                         return fn(*args)
                 raise HttpError.notfound()
-            if request_method=='POST':
+            if request_method == 'POST':
                 fn = self._post_static.get(path_info, None)
                 if fn:
                     return fn()
@@ -1615,7 +1629,9 @@ class WSGIApplication(object):
 
         return wsgi
 
+
 if __name__ == '__main__':
     sys.path.append('.')
     import doctest
+
     doctest.testmod()
