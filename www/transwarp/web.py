@@ -1031,6 +1031,8 @@ class Response(object):
 # 将URL 映射到 函数上
 #################################################################
 # 用于捕获变量的re
+# TODO 变量为毛是":"开头的呢？而且一旦开头就全是了？
+# TODO 似乎是这个框架自己定义的，参见Route的实现，例子里面有(\:id)
 _re_route = re.compile(r'(:[a-zA-Z_]\w*)')
 
 
@@ -1161,6 +1163,7 @@ class Route(object):
         """
         传入url，返回捕获的变量
         """
+        # TODO 静态的怎么算？压根就没有route
         m = self.route.match(url)
         if m:
             return m.groups()
@@ -1479,9 +1482,11 @@ class WSGIApplication(object):
         self._interceptors = []
         self._template_engine = None
 
+        # TODO 静态的path，有唯一对应的route(其实就是方法)
         self._get_static = {}
         self._post_static = {}
 
+        #TODO 为什么动态的path会是一个list，且没有path作为key?
         self._get_dynamic = []
         self._post_dynamic = []
 
@@ -1510,6 +1515,7 @@ class WSGIApplication(object):
         logging.info('Add module: %s' % m.__name__)
         for name in dir(m):
             fn = getattr(m, name)
+            # TODO 如果模块中有 可执行的(对应需要被调用的业务函数) 且 具有 '__web_route__'(和url的映射) 和 '__web_method__'(对应url的HTTP方法，如"GET", "POST")
             if callable(fn) and hasattr(fn, '__web_route__') and hasattr(fn, '__web_method__'):
                 self.add_url(fn)
 
@@ -1578,7 +1584,7 @@ class WSGIApplication(object):
                     if args:
                         return fn(*args)
                 raise HttpError.notfound()
-            raise badrequest()
+            raise HttpError.badrequest()
 
         fn_exec = _build_interceptor_chain(fn_route, *self._interceptors)
         fn_exec = _build_interceptor_chain(fn_route, *self._interceptors)
