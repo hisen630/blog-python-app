@@ -40,7 +40,6 @@ WSGI概要：
 import types, os, re, cgi, sys, time, datetime, functools, mimetypes, threading, logging, traceback, urllib
 
 from db import Dict
-import utils
 
 try:
     from cStringIO import StringIO
@@ -165,6 +164,50 @@ _RESPONSE_HEADERS = (
     'X-UA-Compatible',
 )
 
+
+def _to_str(s):
+    '''
+    Convert to str.
+    >>> _to_str('s123') == 's123'
+    True
+    >>> _to_str(u'\u4e2d\u6587') == '\xe4\xb8\xad\xe6\x96\x87'
+    True
+    >>> _to_str(-123) == '-123'
+    True
+    '''
+    if isinstance(s, str):
+        return s
+    if isinstance(s, unicode):
+        return s.encode('utf-8')
+    return str(s)
+
+def _to_unicode(s, encoding='utf-8'):
+    '''
+    Convert to unicode.
+    >>> _to_unicode('\xe4\xb8\xad\xe6\x96\x87') == u'\u4e2d\u6587'
+    True
+    '''
+    return s.decode('utf-8')
+
+def _quote(s, encoding='utf-8'):
+    '''
+    Url quote as str.
+    >>> _quote('http://example/test?a=1+')
+    'http%3A//example/test%3Fa%3D1%2B'
+    >>> _quote(u'hello world!')
+    'hello%20world%21'
+    '''
+    if isinstance(s, unicode):
+        s = s.encode(encoding)
+    return urllib.quote(s)
+
+def _unquote(s, encoding='utf-8'):
+    '''
+    Url unquote as unicode.
+    >>> _unquote('http%3A//example/test%3Fa%3D1+')
+    u'http://example/test?a=1+'
+    '''
+    return urllib.unquote(s).decode(encoding)
 
 class UTC(datetime.tzinfo):
     """
@@ -447,10 +490,10 @@ class Request(object):
 
         def _convert(item):
             if isinstance(item, list):
-                return [utils.to_unicode(i.value) for i in item]
+                return [_to_unicode(i.value) for i in item]
             if item.filename:
                 return MultipartFile(item)
-            return utils.to_unicode(item.value)
+            return _to_unicode(item.value)
 
         fs = cgi.FieldStorage(fp=self._environ['wsgi.input'], environ=self._environ, keep_blank_values=True)
         inputs = dict()
@@ -720,7 +763,7 @@ class Request(object):
                 for c in cookie_str.split(';'):
                     pos = c.find('=')
                     if pos > 0:
-                        cookies[c[:pos].strip()] = utils.unquote(c[pos + 1:])
+                        cookies[c[:pos].strip()] = _unquote(c[pos + 1:])
             self._cookies = cookies
         return self._cookies
 
@@ -788,7 +831,7 @@ class Response(object):
         key = name.upper()
         if key not in _RESPONSE_HEADER_DICT:
             key = name
-        self._headers[key] = utils.to_str(value)
+        self._headers[key] = _to_str(value)
 
     def header(self, name):
         """
@@ -914,7 +957,7 @@ class Response(object):
         """
         if not hasattr(self, '_cookies'):
             self._cookies = {}
-        L = ['%s=%s' % (utils.quote(name), utils.quote(value))]
+        L = ['%s=%s' % (_quote(name), _quote(value))]
         if expires is not None:
             if isinstance(expires, (float, int, long)):
                 L.append('Expires=%s' % datetime.datetime.fromtimestamp(expires, UTC_0).strftime(
@@ -1216,7 +1259,7 @@ class MultipartFile(object):
     """
 
     def __init__(self, storage):
-        self.filename = utils.to_unicode(storage.filename)
+        self.filename = _to_unicode(storage.filename)
         self.file = storage.file
 
 
@@ -1418,7 +1461,7 @@ def _build_interceptor_chain(last_fn, *interceptors):
     ...         print 'after f3()'
     >>> chain = _build_interceptor_chain(target, f1, f2, f3)
     >>> ctx.request = Dict(path_info='/test/abc')
-    >>> chain()
+    >>> a = chain()
     before f1()
     before f2()
     before f3()
@@ -1482,11 +1525,14 @@ class WSGIApplication(object):
         self._interceptors = []
         self._template_engine = None
 
-        # TODO 静态的path，有唯一对应的route(其实就是方法)
+        # hisen comment
+        # 静态的path，有唯一对应的route(其实就是方法),遇到静态请求直接找到对应的处理方法即可
         self._get_static = {}
         self._post_static = {}
 
-        #TODO 为什么动态的path会是一个list，且没有path作为key?
+        # hisen comment
+        # 为什么动态的path会是一个list，且没有path作为key?
+        # 因为动态url中含有参数,压根不知道会长成什么样子,故遇到动态url时需要一个个地匹配预先定义的路由,遇到匹配上的就应用
         self._get_dynamic = []
         self._post_dynamic = []
 
@@ -1564,6 +1610,10 @@ class WSGIApplication(object):
         _application = Dict(document_root=self._document_root)
 
         def fn_route():
+            '''
+            hisen comment
+            通过当前的请求,找到对应此次请求所需要调用的函数
+            '''
             request_method = ctx.request.request_method
             path_info = ctx.request.path_info
             if request_method == 'GET':
@@ -1587,7 +1637,7 @@ class WSGIApplication(object):
             raise HttpError.badrequest()
 
         fn_exec = _build_interceptor_chain(fn_route, *self._interceptors)
-        fn_exec = _build_interceptor_chain(fn_route, *self._interceptors)
+        #fn_exec = _build_interceptor_chain(fn_route, *self._interceptors)
 
         def wsgi(env, start_response):
             """
